@@ -1,4 +1,4 @@
-# 🏦 NovaBank Enterprise AI Platform
+# Novabank Enterprise AI Risk & Fraud Intelligence Platform
 
 ## Overview
 
