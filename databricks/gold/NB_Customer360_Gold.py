@@ -2,10 +2,11 @@
 # Notebook : NB_Customer360_Gold
 # Layer    : Gold
 # Domain   : Customer360
-# Purpose  : Unified Customer360 Gold Dataset
+# Purpose  : Unified Customer360 Analytics Dataset
 # =============================================================
 
 from pyspark.sql import functions as F
+from delta.tables import DeltaTable
 
 # =============================================================
 # Configuration
@@ -36,7 +37,49 @@ AUDIT_TABLE = (
 )
 
 # =============================================================
-# Read Source Tables
+# Helper Functions
+# =============================================================
+
+def validate_columns(
+    dataframe,
+    required_columns,
+    table_name
+):
+    missing_columns = list(
+        set(required_columns)
+        - set(dataframe.columns)
+    )
+
+    if missing_columns:
+        raise Exception(
+            f"""
+            Missing columns in {table_name}
+            {missing_columns}
+            """
+        )
+
+
+def standardise_columns(df):
+
+    for col_name in df.columns:
+
+        cleaned_name = (
+            col_name
+            .strip()
+            .replace(" ", "")
+        )
+
+        df = (
+            df.withColumnRenamed(
+                col_name,
+                cleaned_name
+            )
+        )
+
+    return df
+
+# =============================================================
+# Read Tables
 # =============================================================
 
 customer_df = spark.table(
@@ -56,6 +99,91 @@ risk_df = spark.table(
 )
 
 # =============================================================
+# Standardise Column Names
+# =============================================================
+
+customer_df = standardise_columns(
+    customer_df
+)
+
+transaction_df = standardise_columns(
+    transaction_df
+)
+
+fraud_case_df = standardise_columns(
+    fraud_case_df
+)
+
+risk_df = standardise_columns(
+    risk_df
+)
+
+# =============================================================
+# Schema Validation
+# =============================================================
+
+validate_columns(
+    customer_df,
+    [
+        "CustomerID"
+    ],
+    CUSTOMER_TABLE
+)
+
+validate_columns(
+    transaction_df,
+    [
+        "CustomerID",
+        "TransactionAmount",
+        "TransactionDate"
+    ],
+    TRANSACTION_TABLE
+)
+
+validate_columns(
+    fraud_case_df,
+    [
+        "CustomerID",
+        "fraud_score"
+    ],
+    FRAUD_CASE_TABLE
+)
+
+validate_columns(
+    risk_df,
+    [
+        "CustomerID",
+        "RiskScore",
+        "Exposure"
+    ],
+    RISK_SCORE_TABLE
+)
+
+# =============================================================
+# Duplicate Validation
+# =============================================================
+
+duplicate_customer_df = (
+    customer_df
+    .groupBy("CustomerID")
+    .count()
+    .filter("count > 1")
+)
+
+if duplicate_customer_df.count() > 0:
+
+    duplicate_customer_df.show(
+        truncate=False
+    )
+
+    raise Exception(
+        """
+        Duplicate CustomerID detected
+        in customer_silver
+        """
+    )
+
+# =============================================================
 # Transaction Aggregation
 # =============================================================
 
@@ -63,33 +191,37 @@ txn_agg_df = (
     transaction_df
     .groupBy("CustomerID")
     .agg(
+
         F.count("*")
-            .alias("TotalTransactions"),
+        .alias(
+            "TotalTransactions"
+        ),
 
         F.round(
-            F.sum("TransactionAmount"), 2
-        ).alias(
+            F.sum(
+                "TransactionAmount"
+            ),
+            2
+        )
+        .alias(
             "TotalTransactionAmount"
         ),
 
         F.round(
-            F.avg("TransactionAmount"), 2
-        ).alias(
+            F.avg(
+                "TransactionAmount"
+            ),
+            2
+        )
+        .alias(
             "AverageTransactionAmount"
         ),
 
-        F.max("TransactionDate")
-            .alias("LastTransactionDate"),
-
-        F.sum(
-            F.when(
-                F.col(
-                    "PotentialFraudFlag"
-                ) == "Y",
-                1
-            ).otherwise(0)
-        ).alias(
-            "FraudAlertCount"
+        F.max(
+            "TransactionDate"
+        )
+        .alias(
+            "LastTransactionDate"
         )
     )
 )
@@ -102,14 +234,18 @@ fraud_agg_df = (
     fraud_case_df
     .groupBy("CustomerID")
     .agg(
-        F.max("fraud_score")
-            .alias("LatestFraudScore"),
 
         F.count("*")
-            .alias("FraudCaseCount"),
+        .alias(
+            "FraudCaseCount"
+        ),
 
-        F.max("status")
-            .alias("LatestFraudStatus")
+        F.max(
+            "fraud_score"
+        )
+        .alias(
+            "LatestFraudScore"
+        )
     )
 )
 
@@ -118,22 +254,22 @@ fraud_agg_df = (
 # =============================================================
 
 customer360_df = (
-    customer_df.alias("c")
+    customer_df
 
     .join(
-        txn_agg_df.alias("t"),
+        txn_agg_df,
         "CustomerID",
         "left"
     )
 
     .join(
-        fraud_agg_df.alias("f"),
+        fraud_agg_df,
         "CustomerID",
         "left"
     )
 
     .join(
-        risk_df.alias("r"),
+        risk_df,
         "CustomerID",
         "left"
     )
@@ -144,16 +280,18 @@ customer360_df = (
 # =============================================================
 
 customer360_df = (
-    customer360_df.fillna({
-        "TotalTransactions": 0,
-        "TotalTransactionAmount": 0,
-        "AverageTransactionAmount": 0,
-        "FraudAlertCount": 0,
-        "LatestFraudScore": 0,
-        "FraudCaseCount": 0,
-        "Exposure": 0,
-        "RiskScore": 0
-    })
+    customer360_df
+    .fillna(
+        {
+            "TotalTransactions": 0,
+            "TotalTransactionAmount": 0,
+            "AverageTransactionAmount": 0,
+            "FraudCaseCount": 0,
+            "LatestFraudScore": 0,
+            "RiskScore": 0,
+            "Exposure": 0
+        }
+    )
 )
 
 # =============================================================
@@ -197,19 +335,25 @@ customer360_df = (
         "FraudRiskCategory",
 
         F.when(
-            F.col("LatestFraudScore") >= 90,
+            F.col(
+                "LatestFraudScore"
+            ) >= 90,
 
             "CRITICAL"
         )
 
         .when(
-            F.col("LatestFraudScore") >= 75,
+            F.col(
+                "LatestFraudScore"
+            ) >= 75,
 
             "HIGH"
         )
 
         .when(
-            F.col("LatestFraudScore") >= 60,
+            F.col(
+                "LatestFraudScore"
+            ) >= 60,
 
             "MEDIUM"
         )
@@ -221,7 +365,7 @@ customer360_df = (
 )
 
 # =============================================================
-# Risk Category
+# Enterprise Risk Category
 # =============================================================
 
 customer360_df = (
@@ -230,13 +374,17 @@ customer360_df = (
         "EnterpriseRiskCategory",
 
         F.when(
-            F.col("RiskScore") >= 70,
+            F.col(
+                "RiskScore"
+            ) >= 70,
 
             "HIGH"
         )
 
         .when(
-            F.col("RiskScore") >= 30,
+            F.col(
+                "RiskScore"
+            ) >= 30,
 
             "MEDIUM"
         )
@@ -257,37 +405,41 @@ customer360_df = (
         "Customer360Tier",
 
         F.when(
-            (F.col(
-                "LatestFraudScore"
-            ) >= 90)
-
+            (
+                F.col(
+                    "LatestFraudScore"
+                ) >= 90
+            )
             |
-
-            (F.col(
-                "RiskScore"
-            ) >= 90),
+            (
+                F.col(
+                    "RiskScore"
+                ) >= 90
+            ),
 
             "CRITICAL"
         )
 
         .when(
-            (F.col(
-                "LatestFraudScore"
-            ) >= 75)
-
+            (
+                F.col(
+                    "LatestFraudScore"
+                ) >= 75
+            )
             |
-
-            (F.col(
-                "RiskScore"
-            ) >= 70),
+            (
+                F.col(
+                    "RiskScore"
+                ) >= 70
+            ),
 
             "HIGH"
         )
 
         .when(
-            (F.col(
+            F.col(
                 "RiskScore"
-            ) >= 30),
+            ) >= 30,
 
             "MEDIUM"
         )
@@ -299,7 +451,31 @@ customer360_df = (
 )
 
 # =============================================================
-# Technical Columns
+# Data Quality Metrics
+# =============================================================
+
+null_customer_count = (
+    customer360_df
+    .filter(
+        F.col(
+            "CustomerID"
+        ).isNull()
+    )
+    .count()
+)
+
+negative_amount_count = (
+    customer360_df
+    .filter(
+        F.col(
+            "TotalTransactionAmount"
+        ) < 0
+    )
+    .count()
+)
+
+# =============================================================
+# Metadata Columns
 # =============================================================
 
 customer360_df = (
@@ -311,44 +487,69 @@ customer360_df = (
 )
 
 # =============================================================
-# Write Gold Table
+# Delta Merge
 # =============================================================
 
-(
-    customer360_df.write
+if not spark.catalog.tableExists(
+    TARGET_TABLE
+):
+
+    (
+        customer360_df.write
         .format("delta")
-        .mode("overwrite")
-        .option(
-            "overwriteSchema",
-            "true"
-        )
         .saveAsTable(
             TARGET_TABLE
         )
-)
+    )
+
+else:
+
+    target = DeltaTable.forName(
+        spark,
+        TARGET_TABLE
+    )
+
+    (
+        target.alias("t")
+        .merge(
+            customer360_df.alias("s"),
+
+            """
+            t.CustomerID =
+            s.CustomerID
+            """
+        )
+
+        .whenMatchedUpdateAll()
+
+        .whenNotMatchedInsertAll()
+
+        .execute()
+    )
 
 # =============================================================
-# Performance Optimisation
+# Optimize
 # =============================================================
 
 spark.sql(
-    f"OPTIMIZE {TARGET_TABLE}"
+    f"""
+    OPTIMIZE {TARGET_TABLE}
+    """
 )
-
-# Optional
 
 spark.sql(
     f"""
     OPTIMIZE {TARGET_TABLE}
     ZORDER BY (
         CustomerID,
-        Customer360Tier
+        Customer360Tier,
+        EnterpriseRiskCategory
     )
     """
 )
 
 # =============================================================
-# Audit Logging
+# Audit Metrics
 # =============================================================
 
 record_count = (
@@ -359,32 +560,50 @@ audit_df = spark.createDataFrame(
     [
         (
             "customer360_gold",
-            record_count
+            record_count,
+            null_customer_count,
+            negative_amount_count
         )
     ],
     [
         "pipeline_name",
-        "records_processed"
+        "records_processed",
+        "null_customer_count",
+        "negative_amount_count"
     ]
 )
 
 (
     audit_df.write
-        .format("delta")
-        .mode("append")
-        .saveAsTable(
-            AUDIT_TABLE
-        )
+    .format("delta")
+    .mode("append")
+    .saveAsTable(
+        AUDIT_TABLE
+    )
 )
 
 # =============================================================
-# Validation
+# Validation Output
 # =============================================================
 
 print(
     f"""
-Customer360 Records Created:
+Customer360 Records Processed :
 {record_count}
+"""
+)
+
+print(
+    f"""
+Null Customer IDs :
+{null_customer_count}
+"""
+)
+
+print(
+    f"""
+Negative Amount Records :
+{negative_amount_count}
 """
 )
 
