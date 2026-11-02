@@ -1,0 +1,80 @@
+{
+  "name": "PL_Transaction_Ingestion",
+  "properties": {
+    "description": "Incremental transaction ingestion pipeline",
+    "parameters": {
+      "SourceSystem": {
+        "type": "string"
+      },
+      "SourceObject": {
+        "type": "string"
+      },
+      "LoadType": {
+        "type": "string"
+      },
+      "WatermarkColumn": {
+        "type": "string"
+      },
+      "TargetContainer": {
+        "type": "string"
+      }
+    },
+    "activities": [
+      {
+        "name": "Get_Last_Watermark",
+        "type": "Lookup",
+        "typeProperties": {
+          "source": {
+            "type": "AzureSqlSource"
+          },
+          "dataset": {
+            "referenceName": "DS_Watermark",
+            "type": "DatasetReference"
+          }
+        }
+      },
+      {
+        "name": "Copy_Transactions_To_Bronze",
+        "type": "Copy",
+        "dependsOn": [
+          {
+            "activity": "Get_Last_Watermark",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "policy": {
+          "retry": 3,
+          "retryIntervalInSeconds": 60
+        },
+        "typeProperties": {
+          "source": {
+            "type": "AzureSqlSource",
+            "sqlReaderQuery": "SELECT * FROM Transactions WHERE LastModifiedDate > '@{activity('Get_Last_Watermark').output.firstRow.WatermarkValue}'"
+          },
+          "sink": {
+            "type": "DelimitedTextSink"
+          }
+        }
+      },
+      {
+        "name": "Update_Watermark",
+        "type": "StoredProcedure",
+        "dependsOn": [
+          {
+            "activity": "Copy_Transactions_To_Bronze",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ]
+      }
+    ],
+    "annotations": [
+      "Incremental Load",
+      "Transactions",
+      "Bronze Layer"
+    ]
+  }
+}
