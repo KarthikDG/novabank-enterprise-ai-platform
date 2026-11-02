@@ -1,11 +1,16 @@
 # ============================================================
-# Script     : Deploy_Fraud_Model.py
-# Domain     : Fraud Detection
-# Purpose    : Promote MLflow model to Production
+# Script     : Monitor_Model_Drift.py
+# Domain     : MLOps Monitoring
+# Purpose    : Monitor model drift and performance degradation
+# Platform   : Databricks + MLflow
 # ============================================================
 
-from mlflow.tracking import MlflowClient
 import mlflow
+import pandas as pd
+import numpy as np
+
+from scipy.stats import ks_2samp
+from datetime import datetime
 
 # ============================================================
 # Configuration
@@ -13,115 +18,268 @@ import mlflow
 
 MODEL_NAME = "NovaBank_Fraud_Detection_Model"
 
-TARGET_STAGE = "Production"
+FEATURE_DRIFT_THRESHOLD = 0.15
+
+PREDICTION_DRIFT_THRESHOLD = 0.20
+
+ACCURACY_THRESHOLD = 0.90
 
 # ============================================================
-# MLflow Client
+# Reference Dataset
 # ============================================================
 
-client = MlflowClient()
+reference_query = """
+
+SELECT
+
+    transaction_amount,
+    fraud_signal_count,
+    total_transactions,
+    fraud_score
+
+FROM novabank_prod.ml.training_features
+
+"""
+
+reference_df = spark.sql(
+    reference_query
+).toPandas()
 
 # ============================================================
-# Get Latest Model Version
+# Production Dataset
 # ============================================================
 
-latest_versions = client.get_latest_versions(
-    MODEL_NAME
+production_query = """
+
+SELECT
+
+    transaction_amount,
+    fraud_signal_count,
+    total_transactions,
+    fraud_score
+
+FROM novabank_prod.ml.production_features
+
+"""
+
+production_df = spark.sql(
+    production_query
+).toPandas()
+
+# ============================================================
+# Feature Drift Calculation
+# ============================================================
+
+feature_results = []
+
+feature_columns = [
+    "transaction_amount",
+    "fraud_signal_count",
+    "total_transactions",
+    "fraud_score"
+]
+
+for feature in feature_columns:
+
+    statistic, p_value = ks_2samp(
+        reference_df[feature],
+        production_df[feature]
+    )
+
+    drift_detected = (
+        statistic > FEATURE_DRIFT_THRESHOLD
+    )
+
+    feature_results.append({
+
+        "feature": feature,
+
+        "ks_statistic": round(
+            statistic,
+            4
+        ),
+
+        "drift_detected": drift_detected
+
+    })
+
+# ============================================================
+# Drift Summary
+# ============================================================
+
+feature_drift_df = pd.DataFrame(
+    feature_results
 )
 
-latest_version = max(
-    [int(v.version) for v in latest_versions]
-)
-
-print(
-    f"Latest Model Version Found: {latest_version}"
-)
-
-# ============================================================
-# Archive Existing Production Models
-# ============================================================
-
-for model_version in latest_versions:
-
-    if model_version.current_stage == "Production":
-
-        client.transition_model_version_stage(
-            name=MODEL_NAME,
-            version=model_version.version,
-            stage="Archived"
-        )
-
-        print(
-            f"Archived version "
-            f"{model_version.version}"
-        )
-
-# ============================================================
-# Promote to Production
-# ============================================================
-
-client.transition_model_version_stage(
-    name=MODEL_NAME,
-    version=latest_version,
-    stage=TARGET_STAGE
-)
-
-print(
-    f"Version {latest_version} promoted "
-    f"to {TARGET_STAGE}"
+total_drifted_features = len(
+    feature_drift_df[
+        feature_drift_df["drift_detected"]
+    ]
 )
 
 # ============================================================
-# Load Production Model
+# Prediction Drift Check
 # ============================================================
 
-model_uri = (
+prediction_query = """
 
-    f"models:/{MODEL_NAME}/Production"
+SELECT
 
+    prediction_probability
+
+FROM novabank_prod.ml.predictions
+
+WHERE prediction_date >= date_sub(
+    current_date(),
+    7
 )
 
-model = mlflow.pyfunc.load_model(
-    model_uri
+"""
+
+prediction_df = spark.sql(
+    prediction_query
+).toPandas()
+
+baseline_probability = 0.50
+
+current_probability = (
+    prediction_df[
+        "prediction_probability"
+    ].mean()
 )
 
-print(
-    "Production model loaded successfully"
+prediction_drift = abs(
+    current_probability
+    - baseline_probability
+)
+
+prediction_drift_detected = (
+    prediction_drift
+    > PREDICTION_DRIFT_THRESHOLD
 )
 
 # ============================================================
-# Example Prediction Payload
+# Production Performance Metrics
 # ============================================================
 
-sample_transaction = {
+performance_query = """
 
-    "transaction_amount": 15000.00,
-    "fraud_signal_count": 5,
-    "total_transactions": 120,
-    "fraud_score": 85
+SELECT
 
+    accuracy,
+    recall,
+    precision,
+    f1_score
+
+FROM novabank_prod.ml.model_metrics
+
+ORDER BY evaluation_timestamp DESC
+
+LIMIT 1
+
+"""
+
+performance_df = spark.sql(
+    performance_query
+).toPandas()
+
+accuracy = float(
+    performance_df["accuracy"][0]
+)
+
+performance_issue = (
+    accuracy < ACCURACY_THRESHOLD
+)
+
+# ============================================================
+# Alert Generation
+# ============================================================
+
+alerts = []
+
+if total_drifted_features > 0:
+
+    alerts.append(
+        f"{total_drifted_features} "
+        f"features show drift"
+    )
+
+if prediction_drift_detected:
+
+    alerts.append(
+        "Prediction drift threshold exceeded"
+    )
+
+if performance_issue:
+
+    alerts.append(
+        "Model accuracy below threshold"
+    )
+
+# ============================================================
+# Monitoring Summary
+# ============================================================
+
+summary = {
+
+    "monitoring_timestamp":
+        datetime.utcnow(),
+
+    "drifted_features":
+        total_drifted_features,
+
+    "prediction_drift":
+        round(
+            prediction_drift,
+            4
+        ),
+
+    "accuracy":
+        accuracy,
+
+    "alert_count":
+        len(alerts)
 }
 
-print(
-    "Deployment validation complete"
+summary_df = pd.DataFrame(
+    [summary]
 )
+
+spark.createDataFrame(
+    summary_df
+).write \
+ .format("delta") \
+ .mode("append") \
+ .saveAsTable(
+    "novabank_prod.ml.model_drift_monitoring"
+ )
 
 # ============================================================
-# Deployment Summary
+# Retraining Recommendation
+# ============================================================
+
+if len(alerts) > 0:
+
+    print(
+        "RETRAINING RECOMMENDED"
+    )
+
+    for alert in alerts:
+
+        print(
+            f"ALERT: {alert}"
+        )
+
+else:
+
+    print(
+        "Model Performance Normal"
+    )
+
+# ============================================================
+# Completion
 # ============================================================
 
 print(
-    f"Model Name    : {MODEL_NAME}"
-)
-
-print(
-    f"Version       : {latest_version}"
-)
-
-print(
-    f"Stage         : Production"
-)
-
-print(
-    "Deployment Status : SUCCESS"
+    "Model Drift Monitoring Completed"
 )
