@@ -1,0 +1,6 @@
+customer_id,customer_name,risk_score,exposure,risk_category
+1001,Donald Reyes,91,31744,HIGH
+1004,Christine Harrison,73,327885,HIGH
+1006,Nathaniel Marshall,91,26101,HIGH
+1007,Thomas Diaz,87,124653,HIGH
+1009,Michael Cervantes,88,483503,HIGH
