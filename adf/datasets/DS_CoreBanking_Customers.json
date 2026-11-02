@@ -1,0 +1,64 @@
+{
+  "name": "DS_CoreBanking_Customers",
+  "properties": {
+    "linkedServiceName": {
+      "referenceName": "LS_CoreBanking_AzureSQL",
+      "type": "LinkedServiceReference"
+    },
+    "annotations": [
+      "Core Banking",
+      "Customer Master"
+    ],
+    "type": "AzureSqlTable",
+    "schema": [
+      {
+        "name": "CustomerID",
+        "type": "Int64"
+      },
+      {
+        "name": "CustomerNumber",
+        "type": "String"
+      },
+      {
+        "name": "FirstName",
+        "type": "String"
+      },
+      {
+        "name": "LastName",
+        "type": "String"
+      },
+      {
+        "name": "DateOfBirth",
+        "type": "DateTime"
+      },
+      {
+        "name": "EmailAddress",
+        "type": "String"
+      },
+      {
+        "name": "PhoneNumber",
+        "type": "String"
+      },
+      {
+        "name": "CountryCode",
+        "type": "String"
+      },
+      {
+        "name": "KYCStatus",
+        "type": "String"
+      },
+      {
+        "name": "RiskRating",
+        "type": "String"
+      },
+      {
+        "name": "LastModifiedDate",
+        "type": "DateTime"
+      }
+    ],
+    "typeProperties": {
+      "schema": "dbo",
+      "table": "Customer"
+    }
+  }
+}
