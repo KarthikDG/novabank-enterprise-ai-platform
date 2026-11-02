@@ -1,12 +1,11 @@
 # =============================================================
 # Notebook : NB_Customer360_Gold
 # Layer    : Gold
-# Domain   : Customer 360
-# Purpose  : Create Customer 360 analytics table
+# Domain   : Customer360
+# Purpose  : Unified Customer360 Gold Dataset
 # =============================================================
 
 from pyspark.sql import functions as F
-from pyspark.sql.window import Window
 
 # =============================================================
 # Configuration
@@ -18,6 +17,14 @@ CUSTOMER_TABLE = (
 
 TRANSACTION_TABLE = (
     "novabank_prod.transactions.transactions_silver"
+)
+
+FRAUD_CASE_TABLE = (
+    "novabank_prod.fraud.fraud_cases_silver"
+)
+
+RISK_SCORE_TABLE = (
+    "novabank_prod.risk.risk_scores_silver"
 )
 
 TARGET_TABLE = (
@@ -32,12 +39,24 @@ AUDIT_TABLE = (
 # Read Source Tables
 # =============================================================
 
-customer_df = spark.table(CUSTOMER_TABLE)
+customer_df = spark.table(
+    CUSTOMER_TABLE
+)
 
-transaction_df = spark.table(TRANSACTION_TABLE)
+transaction_df = spark.table(
+    TRANSACTION_TABLE
+)
+
+fraud_case_df = spark.table(
+    FRAUD_CASE_TABLE
+)
+
+risk_df = spark.table(
+    RISK_SCORE_TABLE
+)
 
 # =============================================================
-# Customer Level Aggregation
+# Transaction Aggregation
 # =============================================================
 
 txn_agg_df = (
@@ -47,32 +66,74 @@ txn_agg_df = (
         F.count("*")
             .alias("TotalTransactions"),
 
-        F.sum("TransactionAmount")
-            .alias("TotalTransactionAmount"),
+        F.round(
+            F.sum("TransactionAmount"), 2
+        ).alias(
+            "TotalTransactionAmount"
+        ),
 
-        F.avg("TransactionAmount")
-            .alias("AverageTransactionAmount"),
+        F.round(
+            F.avg("TransactionAmount"), 2
+        ).alias(
+            "AverageTransactionAmount"
+        ),
 
         F.max("TransactionDate")
             .alias("LastTransactionDate"),
 
         F.sum(
             F.when(
-                F.col("PotentialFraudFlag") == "Y",
+                F.col(
+                    "PotentialFraudFlag"
+                ) == "Y",
                 1
             ).otherwise(0)
-        ).alias("FraudAlertCount")
+        ).alias(
+            "FraudAlertCount"
+        )
     )
 )
 
 # =============================================================
-# Customer 360 Creation
+# Fraud Aggregation
+# =============================================================
+
+fraud_agg_df = (
+    fraud_case_df
+    .groupBy("CustomerID")
+    .agg(
+        F.max("fraud_score")
+            .alias("LatestFraudScore"),
+
+        F.count("*")
+            .alias("FraudCaseCount"),
+
+        F.max("status")
+            .alias("LatestFraudStatus")
+    )
+)
+
+# =============================================================
+# Customer360 Join
 # =============================================================
 
 customer360_df = (
     customer_df.alias("c")
+
     .join(
         txn_agg_df.alias("t"),
+        "CustomerID",
+        "left"
+    )
+
+    .join(
+        fraud_agg_df.alias("f"),
+        "CustomerID",
+        "left"
+    )
+
+    .join(
+        risk_df.alias("r"),
         "CustomerID",
         "left"
     )
@@ -83,54 +144,157 @@ customer360_df = (
 # =============================================================
 
 customer360_df = (
-    customer360_df
-    .fillna(
-        {
-            "TotalTransactions": 0,
-            "TotalTransactionAmount": 0,
-            "AverageTransactionAmount": 0,
-            "FraudAlertCount": 0
-        }
-    )
+    customer360_df.fillna({
+        "TotalTransactions": 0,
+        "TotalTransactionAmount": 0,
+        "AverageTransactionAmount": 0,
+        "FraudAlertCount": 0,
+        "LatestFraudScore": 0,
+        "FraudCaseCount": 0,
+        "Exposure": 0,
+        "RiskScore": 0
+    })
 )
 
 # =============================================================
-# Risk Segmentation
+# Customer Spend Segment
 # =============================================================
 
 customer360_df = (
     customer360_df
     .withColumn(
-        "CustomerSegment",
+        "CustomerSpendSegment",
+
         F.when(
-            F.col("TotalTransactionAmount") >= 100000,
+            F.col(
+                "TotalTransactionAmount"
+            ) >= 100000,
+
             "PREMIUM"
         )
+
         .when(
-            F.col("TotalTransactionAmount") >= 25000,
+            F.col(
+                "TotalTransactionAmount"
+            ) >= 50000,
+
             "GOLD"
         )
-        .otherwise("STANDARD")
+
+        .otherwise(
+            "STANDARD"
+        )
     )
 )
 
 # =============================================================
-# Fraud Category
+# Fraud Risk Category
 # =============================================================
 
 customer360_df = (
     customer360_df
     .withColumn(
         "FraudRiskCategory",
+
         F.when(
-            F.col("FraudAlertCount") >= 10,
+            F.col("LatestFraudScore") >= 90,
+
+            "CRITICAL"
+        )
+
+        .when(
+            F.col("LatestFraudScore") >= 75,
+
             "HIGH"
         )
+
         .when(
-            F.col("FraudAlertCount") >= 3,
+            F.col("LatestFraudScore") >= 60,
+
             "MEDIUM"
         )
-        .otherwise("LOW")
+
+        .otherwise(
+            "LOW"
+        )
+    )
+)
+
+# =============================================================
+# Risk Category
+# =============================================================
+
+customer360_df = (
+    customer360_df
+    .withColumn(
+        "EnterpriseRiskCategory",
+
+        F.when(
+            F.col("RiskScore") >= 70,
+
+            "HIGH"
+        )
+
+        .when(
+            F.col("RiskScore") >= 30,
+
+            "MEDIUM"
+        )
+
+        .otherwise(
+            "LOW"
+        )
+    )
+)
+
+# =============================================================
+# Customer360 Tier
+# =============================================================
+
+customer360_df = (
+    customer360_df
+    .withColumn(
+        "Customer360Tier",
+
+        F.when(
+            (F.col(
+                "LatestFraudScore"
+            ) >= 90)
+
+            |
+
+            (F.col(
+                "RiskScore"
+            ) >= 90),
+
+            "CRITICAL"
+        )
+
+        .when(
+            (F.col(
+                "LatestFraudScore"
+            ) >= 75)
+
+            |
+
+            (F.col(
+                "RiskScore"
+            ) >= 70),
+
+            "HIGH"
+        )
+
+        .when(
+            (F.col(
+                "RiskScore"
+            ) >= 30),
+
+            "MEDIUM"
+        )
+
+        .otherwise(
+            "LOW"
+        )
     )
 )
 
@@ -154,23 +318,42 @@ customer360_df = (
     customer360_df.write
         .format("delta")
         .mode("overwrite")
-        .option("overwriteSchema", "true")
-        .saveAsTable(TARGET_TABLE)
+        .option(
+            "overwriteSchema",
+            "true"
+        )
+        .saveAsTable(
+            TARGET_TABLE
+        )
 )
 
 # =============================================================
-# Optimize Gold Table
+# Performance Optimisation
 # =============================================================
 
 spark.sql(
     f"OPTIMIZE {TARGET_TABLE}"
 )
 
+# Optional
+
+spark.sql(
+    f"""
+    OPTIMIZE {TARGET_TABLE}
+    ZORDER BY (
+        CustomerID,
+        Customer360Tier
+    )
+    """
+)
+
 # =============================================================
 # Audit Logging
 # =============================================================
 
-record_count = customer360_df.count()
+record_count = (
+    customer360_df.count()
+)
 
 audit_df = spark.createDataFrame(
     [
@@ -189,7 +372,9 @@ audit_df = spark.createDataFrame(
     audit_df.write
         .format("delta")
         .mode("append")
-        .saveAsTable(AUDIT_TABLE)
+        .saveAsTable(
+            AUDIT_TABLE
+        )
 )
 
 # =============================================================
@@ -197,7 +382,10 @@ audit_df = spark.createDataFrame(
 # =============================================================
 
 print(
-    f"Customer360 Records Created : {record_count}"
+    f"""
+Customer360 Records Created:
+{record_count}
+"""
 )
 
 print(
