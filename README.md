@@ -1,4 +1,4 @@
-# Rabobank Enterprise AI Risk & Fraud Intelligence Platform
+# Novabank Enterprise AI Risk & Fraud Intelligence Platform
 
 ## Overview
 
@@ -21,7 +21,7 @@ This repository contains a reference implementation of an enterprise-scale Data,
 ## Repository Structure
 
 ```text
-rabobank-enterprise-ai-platform/
+novabank-enterprise-ai-platform/
 ├── docs/
 ├── terraform/
 ├── adf/
