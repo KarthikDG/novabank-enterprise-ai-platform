@@ -1,0 +1,6 @@
+customer_id,fraud_score,fraud_case_count,max_risk_score,exposure,priority,investigation_required
+1001,99,2,91,31744,CRITICAL,YES
+1004,94,2,73,327885,CRITICAL,YES
+1017,95,1,75,166963,CRITICAL,YES
+1026,94,1,40,154114,HIGH,YES
+1043,92,2,37,340975,HIGH,YES

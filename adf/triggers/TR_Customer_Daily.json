@@ -1,0 +1,40 @@
+{
+  "name": "TR_Customer_Daily",
+  "properties": {
+    "annotations": [
+      "Customer Master Data",
+      "KYC",
+      "Daily Refresh"
+    ],
+    "runtimeState": "Started",
+    "pipelines": [
+      {
+        "pipelineReference": {
+          "referenceName": "PL_Customer_Ingestion",
+          "type": "PipelineReference"
+        },
+        "parameters": {
+          "SourceSystem": "CoreBanking",
+          "TargetContainer": "bronze"
+        }
+      }
+    ],
+    "type": "ScheduleTrigger",
+    "typeProperties": {
+      "recurrence": {
+        "frequency": "Day",
+        "interval": 1,
+        "startTime": "2026-01-01T01:00:00Z",
+        "timeZone": "UTC",
+        "schedule": {
+          "hours": [
+            1
+          ],
+          "minutes": [
+            0
+          ]
+        }
+      }
+    }
+  }
+}

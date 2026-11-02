@@ -1,0 +1,250 @@
+version: 2
+
+models:
+
+  ##################################################
+  # STAGING MODELS
+  ##################################################
+
+  - name: stg_customer
+
+    description: "Standardised customer dataset from the Silver layer."
+
+    columns:
+
+      - name: customer_id
+        description: "Unique customer identifier"
+
+        tests:
+          - not_null
+          - unique
+
+      - name: customer_number
+
+        tests:
+          - not_null
+
+      - name: email_address
+
+        tests:
+          - not_null
+
+      - name: country_code
+
+        tests:
+          - not_null
+
+  - name: stg_transaction
+
+    description: "Standardised transaction dataset."
+
+    columns:
+
+      - name: transaction_id
+
+        tests:
+          - not_null
+          - unique
+
+      - name: customer_id
+
+        tests:
+          - not_null
+
+      - name: transaction_amount
+
+        tests:
+          - not_null
+
+      - name: transaction_timestamp
+
+        tests:
+          - not_null
+
+  ##################################################
+  # INTERMEDIATE MODELS
+  ##################################################
+
+  - name: int_customer_activity
+
+    description: "Aggregated customer behaviour and activity metrics."
+
+    columns:
+
+      - name: customer_id
+
+        tests:
+          - not_null
+          - unique
+
+      - name: customer_segment
+
+        tests:
+          - accepted_values:
+              values:
+                - PREMIUM
+                - GOLD
+                - STANDARD
+
+  - name: int_fraud_signals
+
+    description: "Fraud signal calculations and reusable fraud features."
+
+    columns:
+
+      - name: transaction_id
+
+        tests:
+          - not_null
+
+      - name: fraud_score
+
+        tests:
+          - not_null
+
+      - name: fraud_risk_level
+
+        tests:
+          - accepted_values:
+              values:
+                - HIGH
+                - MEDIUM
+                - LOW
+
+  ##################################################
+  # DIMENSIONS
+  ##################################################
+
+  - name: dim_customer
+
+    description: "Enterprise customer dimension."
+
+    columns:
+
+      - name: customer_key
+
+        tests:
+          - not_null
+          - unique
+
+      - name: customer_id
+
+        tests:
+          - not_null
+
+      - name: customer_status
+
+        tests:
+          - accepted_values:
+              values:
+                - ACTIVE
+                - REVIEW
+                - RESTRICTED
+
+      - name: fraud_risk_category
+
+        tests:
+          - accepted_values:
+              values:
+                - HIGH
+                - MEDIUM
+                - LOW
+
+  ##################################################
+  # FACT TRANSACTIONS
+  ##################################################
+
+  - name: fact_transactions
+
+    description: "Enterprise transaction fact table."
+
+    columns:
+
+      - name: transaction_key
+
+        tests:
+          - unique
+          - not_null
+
+      - name: customer_key
+
+        tests:
+          - not_null
+
+      - name: transaction_amount
+
+        tests:
+          - not_null
+
+      - name: fraud_risk_level
+
+        tests:
+          - accepted_values:
+              values:
+                - HIGH
+                - MEDIUM
+                - LOW
+
+  ##################################################
+  # FACT FRAUD
+  ##################################################
+
+  - name: fact_fraud_cases
+
+    description: "Fraud investigation and fraud operations fact table."
+
+    columns:
+
+      - name: fraud_case_key
+
+        tests:
+          - unique
+          - not_null
+
+      - name: investigation_priority
+
+        tests:
+          - accepted_values:
+              values:
+                - CRITICAL
+                - HIGH
+                - MEDIUM
+                - LOW
+
+      - name: case_status
+
+        tests:
+          - accepted_values:
+              values:
+                - OPEN
+                - CLOSED
+
+  ##################################################
+  # FACT RISK SCORES
+  ##################################################
+
+  - name: fact_risk_scores
+
+    description: "Enterprise risk scoring fact table."
+
+    columns:
+
+      - name: risk_record_key
+
+        tests:
+          - unique
+          - not_null
+
+      - name: enterprise_risk_level
+
+        tests:
+          - accepted_values:
+              values:
+                - HIGH
+                - MEDIUM
+                - LOW
+
+      - name: total_exposure
+
+        tests:
+          - not_null

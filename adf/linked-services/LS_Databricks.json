@@ -1,0 +1,22 @@
+{
+  "name": "LS_Databricks",
+  "properties": {
+    "description": "Azure Databricks linked service for notebook execution and data processing",
+    "annotations": [
+      "Databricks",
+      "Lakehouse",
+      "Data Engineering"
+    ],
+    "type": "AzureDatabricks",
+    "typeProperties": {
+      "domain": "https://adb-novabank-dev.azuredatabricks.net",
+      "authentication": "MSI",
+      "workspaceResourceId": "/subscriptions/<subscription-id>/resourceGroups/rg-novabank-dev/providers/Microsoft.Databricks/workspaces/adb-novabank-dev",
+      "existingClusterId": "cluster-shared-etl"
+    },
+    "connectVia": {
+      "referenceName": "AutoResolveIntegrationRuntime",
+      "type": "IntegrationRuntimeReference"
+    }
+  }
+}

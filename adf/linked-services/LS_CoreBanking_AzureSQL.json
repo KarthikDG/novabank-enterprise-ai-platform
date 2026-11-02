@@ -1,0 +1,28 @@
+{
+  "name": "LS_CoreBanking_AzureSQL",
+  "properties": {
+    "description": "Linked service connection to Core Banking Azure SQL Database",
+    "annotations": [
+      "Core Banking",
+      "Azure SQL",
+      "Production Source"
+    ],
+    "type": "AzureSqlDatabase",
+    "typeProperties": {
+      "connectionString": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=tcp:novabank-corebanking.database.windows.net,1433;Initial Catalog=NovaBankCore;",
+      "password": {
+        "type": "AzureKeyVaultSecret",
+        "store": {
+          "referenceName": "LS_KeyVault",
+          "type": "LinkedServiceReference"
+        },
+        "secretName": "corebanking-sql-password"
+      },
+      "userName": "svc_adf_corebanking"
+    },
+    "connectVia": {
+      "referenceName": "AutoResolveIntegrationRuntime",
+      "type": "IntegrationRuntimeReference"
+    }
+  }
+}

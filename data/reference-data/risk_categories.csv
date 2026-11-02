@@ -1,0 +1,4 @@
+risk_category,min_score,max_score
+LOW,0,29
+MEDIUM,30,69
+HIGH,70,100

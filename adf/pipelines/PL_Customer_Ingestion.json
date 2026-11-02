@@ -1,0 +1,69 @@
+{
+  "name": "PL_Metadata_Driver",
+  "properties": {
+    "description": "Master metadata driven pipeline for ingestion orchestration",
+    "activities": [
+      {
+        "name": "Lookup_Metadata",
+        "type": "Lookup",
+        "policy": {
+          "timeout": "7.00:00:00",
+          "retry": 3,
+          "retryIntervalInSeconds": 30
+        },
+        "typeProperties": {
+          "source": {
+            "type": "AzureSqlSource"
+          },
+          "dataset": {
+            "referenceName": "DS_Metadata_Control",
+            "type": "DatasetReference"
+          },
+          "firstRowOnly": false
+        }
+      },
+      {
+        "name": "ForEach_Source",
+        "type": "ForEach",
+        "dependsOn": [
+          {
+            "activity": "Lookup_Metadata",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "items": "@activity('Lookup_Metadata').output.value",
+          "isSequential": false,
+          "batchCount": 10,
+          "activities": [
+            {
+              "name": "Execute_Ingestion_Pipeline",
+              "type": "ExecutePipeline",
+              "typeProperties": {
+                "pipeline": {
+                  "referenceName": "PL_Transaction_Ingestion",
+                  "type": "PipelineReference"
+                },
+                "waitOnCompletion": true,
+                "parameters": {
+                  "SourceSystem": "@item().SourceSystem",
+                  "SourceObject": "@item().SourceObject",
+                  "LoadType": "@item().LoadType",
+                  "WatermarkColumn": "@item().WatermarkColumn",
+                  "TargetContainer": "@item().TargetContainer"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "annotations": [
+      "Metadata Driven Framework",
+      "NovaBank",
+      "Enterprise Ingestion"
+    ]
+  }
+}

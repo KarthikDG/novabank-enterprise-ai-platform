@@ -1,0 +1,15 @@
+{
+  "name": "LS_KeyVault",
+  "properties": {
+    "description": "Azure Key Vault linked service for enterprise secret management",
+    "annotations": [
+      "Security",
+      "Key Vault",
+      "Secrets Management"
+    ],
+    "type": "AzureKeyVault",
+    "typeProperties": {
+      "baseUrl": "https://kv-novabank-dev.vault.azure.net/"
+    }
+  }
+}

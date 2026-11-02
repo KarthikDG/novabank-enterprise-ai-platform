@@ -1,0 +1,43 @@
+{
+  "name": "TR_Transaction_15Min",
+  "properties": {
+    "annotations": [
+      "Transactions",
+      "Incremental Load",
+      "Near Real-Time"
+    ],
+    "runtimeState": "Started",
+    "pipelines": [
+      {
+        "pipelineReference": {
+          "referenceName": "PL_Transaction_Ingestion",
+          "type": "PipelineReference"
+        },
+        "parameters": {
+          "SourceSystem": "CoreBanking",
+          "SourceObject": "Transactions",
+          "LoadType": "Incremental",
+          "WatermarkColumn": "LastModifiedDate",
+          "TargetContainer": "bronze"
+        }
+      }
+    ],
+    "type": "ScheduleTrigger",
+    "typeProperties": {
+      "recurrence": {
+        "frequency": "Minute",
+        "interval": 15,
+        "startTime": "2026-01-01T00:00:00Z",
+        "timeZone": "UTC",
+        "schedule": {
+          "minutes": [
+            0,
+            15,
+            30,
+            45
+          ]
+        }
+      }
+    }
+  }
+}

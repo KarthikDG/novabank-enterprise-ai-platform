@@ -1,0 +1,6 @@
+customer_id,fraud_probability,prediction
+1001,0.98,FRAUD
+1002,0.10,LEGITIMATE
+1003,0.62,FRAUD
+1004,0.97,FRAUD
+1005,0.44,LEGITIMATE

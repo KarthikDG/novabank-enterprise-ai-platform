@@ -1,0 +1,19 @@
+{
+  "name": "LS_ADLS_Gen2",
+  "properties": {
+    "description": "Azure Data Lake Storage Gen2 linked service for NovaBank Lakehouse",
+    "annotations": [
+      "ADLS Gen2",
+      "Lakehouse",
+      "Bronze Silver Gold"
+    ],
+    "type": "AzureBlobFS",
+    "typeProperties": {
+      "url": "https://stnovabankdev.dfs.core.windows.net"
+    },
+    "connectVia": {
+      "referenceName": "AutoResolveIntegrationRuntime",
+      "type": "IntegrationRuntimeReference"
+    }
+  }
+}
