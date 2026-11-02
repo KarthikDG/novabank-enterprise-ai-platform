@@ -1,0 +1,11 @@
+customer_id,first_name,last_name,country,segment,risk_rating
+1001,John,Doe,NL,Gold,LOW
+1002,Jane,Smith,NL,Premium,MEDIUM
+1003,Michael,Brown,DE,Standard,HIGH
+1004,Sarah,Wilson,BE,Gold,LOW
+1005,David,Johnson,NL,Premium,MEDIUM
+1006,Emma,Jones,DE,Gold,LOW
+1007,Robert,Taylor,BE,Standard,HIGH
+1008,Sophia,Martin,NL,Gold,LOW
+1009,James,White,FR,Premium,MEDIUM
+1010,Olivia,Harris,NL,Gold,LOW
